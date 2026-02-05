@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block title %}Expenses - Expenses Dashboard{% endblock %}
+
+{% block content %}
+<div class="expenses-page">
+    <h1>Expenses</h1>
+    
+    <div class="filters card">
+        <h3>Filters</h3>
+        <div class="filter-row">
+            <div class="filter-group">
+                <label for="filter-category">Category</label>
+                <select id="filter-category">
+                    <option value="">All Categories</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-search">Search</label>
+                <input type="text" id="filter-search" placeholder="Search description...">
+            </div>
+            <div class="filter-group">
+                <label for="filter-start">Start Date</label>
+                <input type="text" id="filter-start" placeholder="e.g., 1.01">
+            </div>
+            <div class="filter-group">
+                <label for="filter-end">End Date</label>
+                <input type="text" id="filter-end" placeholder="e.g., 1.31">
+            </div>
+            <div class="filter-group">
+                <label for="filter-min">Min Amount</label>
+                <input type="number" id="filter-min" placeholder="€0" step="0.01">
+            </div>
+            <div class="filter-group">
+                <label for="filter-max">Max Amount</label>
+                <input type="number" id="filter-max" placeholder="€1000" step="0.01">
+            </div>
+        </div>
+        <div class="filter-actions">
+            <button onclick="applyFilters()" class="btn btn-primary">Apply Filters</button>
+            <button onclick="clearFilters()" class="btn btn-secondary">Clear</button>
+            <button onclick="exportCSV()" class="btn btn-secondary">Export CSV</button>
+        </div>
+    </div>
+    
+    <div class="card">
+        <div class="table-header">
+            <h3>Transactions <span id="transaction-count">(0)</span></h3>
+        </div>
+        <table class="transactions-table">
+            <thead>
+                <tr>
+                    <th data-sort="date">Date ↕</th>
+                    <th>Description</th>
+                    <th data-sort="category">Category ↕</th>
+                    <th data-sort="amount">Amount ↕</th>
+                </tr>
+            </thead>
+            <tbody id="expenses-list">
+                <tr><td colspan="4">Loading...</td></tr>
+            </tbody>
+        </table>
+        
+        <div class="pagination" id="pagination">
+            <button onclick="changePage(-1)" class="btn btn-secondary" id="prev-btn">← Previous</button>
+            <span id="page-info">Page 1 of 1</span>
+            <button onclick="changePage(1)" class="btn btn-secondary" id="next-btn">Next →</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPage = 1;
+const perPage = 50;
+let currentFilters = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadCategories();
+    loadExpenses();
+});
+
+async function loadCategories() {
+    try {
+        const response = await fetch('/api/categories');
+        const data = await response.json();
+        
+        const select = document.getElementById('filter-category');
+        data.categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat;
+            option.textContent = cat;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading categories:', error);
+    }
+}
+
+async function loadExpenses() {
+    const params = new URLSearchParams({
+        page: currentPage,
+        per_page: perPage,
+        ...currentFilters
+    });
+    
+    // Remove empty filters
+    Object.keys(currentFilters).forEach(key => {
+        if (!currentFilters[key]) params.delete(key);
+    });
+    
+    try {
+        const response = await fetch(`/api/expenses?${params}`);
+        const data = await response.json();
+        
+        // Update count
+        document.getElementById('transaction-count').textContent = 
+            `(${data.pagination.total})`;
+        
+        // Update table
+        const tbody = document.getElementById('expenses-list');
+        
+        if (data.transactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No transactions found</td></tr>';
+        } else {
+            tbody.innerHTML = data.transactions.map(t => `
+                <tr>
+                    <td>${t.date}</td>
+                    <td>${escapeHtml(t.description)}</td>
+                    <td><span class="category-tag">${t.category}</span></td>
+                    <td class="${t.amount > 0 ? 'income' : 'expenses'}">${formatCurrency(t.amount)}</td>
+                </tr>
+            `).join('');
+        }
+        
+        // Update pagination
+        updatePagination(data.pagination);
+    } catch (error) {
+        console.error('Error loading expenses:', error);
+    }
+}
+
+function updatePagination(pagination) {
+    document.getElementById('page-info').textContent = 
+        `Page ${pagination.page} of ${pagination.pages || 1}`;
+    
+    document.getElementById('prev-btn').disabled = pagination.page <= 1;
+    document.getElementById('next-btn').disabled = pagination.page >= pagination.pages;
+}
+
+function changePage(delta) {
+    currentPage += delta;
+    if (currentPage < 1) currentPage = 1;
+    loadExpenses();
+}
+
+function applyFilters() {
+    currentFilters = {
+        category: document.getElementById('filter-category').value,
+        search: document.getElementById('filter-search').value,
+        start_date: document.getElementById('filter-start').value,
+        end_date: document.getElementById('filter-end').value,
+        min_amount: document.getElementById('filter-min').value,
+        max_amount: document.getElementById('filter-max').value
+    };
+    currentPage = 1;
+    loadExpenses();
+}
+
+function clearFilters() {
+    document.getElementById('filter-category').value = '';
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-start').value = '';
+    document.getElementById('filter-end').value = '';
+    document.getElementById('filter-min').value = '';
+    document.getElementById('filter-max').value = '';
+    currentFilters = {};
+    currentPage = 1;
+    loadExpenses();
+}
+
+async function exportCSV() {
+    // Fetch all matching transactions
+    const params = new URLSearchParams(currentFilters);
+    const response = await fetch(`/api/expenses?per_page=10000&${params}`);
+    const data = await response.json();
+    
+    if (data.transactions.length === 0) {
+        alert('No transactions to export');
+        return;
+    }
+    
+    // Build CSV
+    const headers = ['Date', 'Description', 'Category', 'Amount'];
+    const rows = data.transactions.map(t => [
+        t.date,
+        `"${t.description.replace(/"/g, '""')}"`,
+        t.category,
+        t.amount
+    ]);
+    
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+</script>
+{% endblock %}

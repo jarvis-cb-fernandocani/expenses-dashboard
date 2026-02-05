@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Expenses Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>Dashboard</h1>
+    
+    <div class="summary-cards">
+        <div class="card">
+            <h3>💵 Income</h3>
+            <p class="amount income" id="monthly-income">€0.00</p>
+            <p class="label">This Month</p>
+        </div>
+        <div class="card">
+            <h3>💸 Expenses</h3>
+            <p class="amount expenses" id="monthly-expenses">€0.00</p>
+            <p class="label">This Month</p>
+        </div>
+        <div class="card">
+            <h3>📈 Net</h3>
+            <p class="amount net" id="monthly-net">€0.00</p>
+            <p class="label">This Month</p>
+        </div>
+        <div class="card">
+            <h3>📊 Savings Rate</h3>
+            <p class="amount" id="savings-rate">0%</p>
+            <p class="label">This Month</p>
+        </div>
+    </div>
+
+    <div class="dashboard-grid">
+        <div class="card">
+            <h2>Year Summary</h2>
+            <div id="year-summary">
+                <p class="amount income">Income: €<span id="year-income">0.00</span></p>
+                <p class="amount expenses">Expenses: €<span id="year-expenses">0.00</span></p>
+                <p class="amount net">Net: €<span id="year-net">0.00</span></p>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Quick Actions</h2>
+            <div class="actions">
+                <a href="/upload" class="btn btn-primary">📤 Upload Statement</a>
+                <a href="/expenses" class="btn btn-secondary">📋 View Expenses</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Recent Transactions</h2>
+        <table class="transactions-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Amount</th>
+                </tr>
+            </thead>
+            <tbody id="recent-transactions">
+                <tr><td colspan="4">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadDashboardData();
+});
+
+async function loadDashboardData() {
+    try {
+        // Load monthly summary
+        const month = new Date().getMonth() + 1;
+        const year = new Date().getFullYear();
+        
+        const summaryRes = await fetch(`/api/summary?year=${year}&month=${month}`);
+        const summary = await summaryRes.json();
+        
+        document.getElementById('monthly-income').textContent = formatCurrency(summary.income);
+        document.getElementById('monthly-expenses').textContent = formatCurrency(summary.expenses);
+        document.getElementById('monthly-net').textContent = formatCurrency(summary.net);
+        document.getElementById('savings-rate').textContent = summary.savings_rate.toFixed(1) + '%';
+        
+        // Year summary
+        const yearRes = await fetch(`/api/summary?year=${year}`);
+        const yearData = await yearRes.json();
+        
+        document.getElementById('year-income').textContent = formatNumber(yearData.income);
+        document.getElementById('year-expenses').textContent = formatNumber(yearData.expenses);
+        document.getElementById('year-net').textContent = formatNumber(yearData.net);
+        
+        // Recent transactions
+        const transactionsRes = await fetch('/api/expenses?per_page=10');
+        const transactionsData = await transactionsRes.json();
+        
+        const tbody = document.getElementById('recent-transactions');
+        tbody.innerHTML = '';
+        
+        if (transactionsData.transactions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4">No transactions found</td></tr>';
+        } else {
+            transactionsData.transactions.forEach(t => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${t.date}</td>
+                    <td>${escapeHtml(t.description)}</td>
+                    <td><span class="category-tag">${t.category}</span></td>
+                    <td class="${t.amount > 0 ? 'income' : 'expenses'}">${formatCurrency(t.amount)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading dashboard:', error);
+    }
+}
+</script>
+{% endblock %}
