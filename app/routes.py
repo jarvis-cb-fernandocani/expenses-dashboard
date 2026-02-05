@@ -68,11 +68,11 @@ def upload_file():
         
         try:
             # Parse the PDF
-            transactions = parse_millennium_statement(filepath)
+            transactions, period_start, period_end = parse_millennium_statement(filepath)
             
             if not transactions:
                 return jsonify({
-                    'error': 'No transactions found in PDF',
+                    'error': 'No transactions found in PDF. Make sure it is a valid Millennium BCP statement.',
                     'filename': filename
                 }), 400
             
@@ -84,17 +84,25 @@ def upload_file():
             database = get_db()
             statement_id = database.add_statement(
                 filename=filename,
+                period_start=period_start,
+                period_end=period_end,
                 total_income=income,
                 total_expenses=expenses
             )
             database.add_transactions_bulk(statement_id, transactions)
             
+            period_msg = ""
+            if period_start and period_end:
+                period_msg = f" Period: {period_start} to {period_end}."
+            
             return jsonify({
                 'success': True,
-                'message': f'Successfully processed {len(transactions)} transactions',
+                'message': f'Successfully processed {len(transactions)} transactions{period_msg}',
                 'statement_id': statement_id,
                 'filename': filename,
                 'transactions_count': len(transactions),
+                'period_start': period_start,
+                'period_end': period_end,
                 'income': income,
                 'expenses': expenses
             })
@@ -103,7 +111,10 @@ def upload_file():
             # Clean up file on error
             if os.path.exists(filepath):
                 os.remove(filepath)
-            return jsonify({'error': str(e)}), 500
+            return jsonify({
+                'error': 'Failed to parse PDF. Please ensure it is a valid Millennium BCP statement.',
+                'details': str(e)
+            }), 500
     
     return jsonify({'error': 'Invalid file type. Only PDF files are allowed.'}), 400
 

@@ -4,10 +4,10 @@
 
 {% block content %}
 <div class="expenses-page">
-    <h1>Expenses</h1>
+    <h1>💳 Expenses</h1>
     
-    <div class="filters card">
-        <h3>Filters</h3>
+    <div class="filters card" id="filters-card">
+        <h3 onclick="toggleFilters()">Filters ▼</h3>
         <div class="filter-row">
             <div class="filter-group">
                 <label for="filter-category">Category</label>
@@ -16,16 +16,14 @@
                 </select>
             </div>
             <div class="filter-group">
+                <label for="filter-statement">Statement</label>
+                <select id="filter-statement">
+                    <option value="">All Statements</option>
+                </select>
+            </div>
+            <div class="filter-group">
                 <label for="filter-search">Search</label>
                 <input type="text" id="filter-search" placeholder="Search description...">
-            </div>
-            <div class="filter-group">
-                <label for="filter-start">Start Date</label>
-                <input type="text" id="filter-start" placeholder="e.g., 1.01">
-            </div>
-            <div class="filter-group">
-                <label for="filter-end">End Date</label>
-                <input type="text" id="filter-end" placeholder="e.g., 1.31">
             </div>
             <div class="filter-group">
                 <label for="filter-min">Min Amount</label>
@@ -37,9 +35,9 @@
             </div>
         </div>
         <div class="filter-actions">
-            <button onclick="applyFilters()" class="btn btn-primary">Apply Filters</button>
+            <button onclick="applyFilters()" class="btn btn-primary">Apply</button>
             <button onclick="clearFilters()" class="btn btn-secondary">Clear</button>
-            <button onclick="exportCSV()" class="btn btn-secondary">Export CSV</button>
+            <button onclick="exportCSV()" class="btn btn-secondary">📥 Export CSV</button>
         </div>
     </div>
     
@@ -75,9 +73,11 @@
 let currentPage = 1;
 const perPage = 50;
 let currentFilters = {};
+let statementsData = [];
 
 document.addEventListener('DOMContentLoaded', function() {
     loadCategories();
+    loadStatements();
     loadExpenses();
 });
 
@@ -96,6 +96,34 @@ async function loadCategories() {
     } catch (error) {
         console.error('Error loading categories:', error);
     }
+}
+
+async function loadStatements() {
+    try {
+        const response = await fetch('/api/statements');
+        const data = await response.json();
+        
+        statementsData = data.statements || [];
+        
+        const select = document.getElementById('filter-statement');
+        statementsData.forEach(s => {
+            const option = document.createElement('option');
+            option.value = s.id;
+            const period = s.period_start ? s.period_start.substring(0, 7) : 'Unknown';
+            option.textContent = `${period} - ${s.filename}`;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading statements:', error);
+    }
+}
+
+function toggleFilters() {
+    document.getElementById('filters-card').classList.toggle('collapsed');
+    const h3 = document.querySelector('#filters-card h3');
+    h3.textContent = document.getElementById('filters-card').classList.contains('collapsed') 
+        ? 'Filters ►' 
+        : 'Filters ▼';
 }
 
 async function loadExpenses() {
@@ -157,10 +185,9 @@ function changePage(delta) {
 
 function applyFilters() {
     currentFilters = {
+        statement_id: document.getElementById('filter-statement').value,
         category: document.getElementById('filter-category').value,
         search: document.getElementById('filter-search').value,
-        start_date: document.getElementById('filter-start').value,
-        end_date: document.getElementById('filter-end').value,
         min_amount: document.getElementById('filter-min').value,
         max_amount: document.getElementById('filter-max').value
     };
@@ -170,9 +197,8 @@ function applyFilters() {
 
 function clearFilters() {
     document.getElementById('filter-category').value = '';
+    document.getElementById('filter-statement').value = '';
     document.getElementById('filter-search').value = '';
-    document.getElementById('filter-start').value = '';
-    document.getElementById('filter-end').value = '';
     document.getElementById('filter-min').value = '';
     document.getElementById('filter-max').value = '';
     currentFilters = {};
@@ -191,13 +217,24 @@ async function exportCSV() {
         return;
     }
     
+    // Generate filename with period
+    let filename = 'expenses';
+    if (currentFilters.statement_id) {
+        const stmt = statementsData.find(s => s.id == currentFilters.statement_id);
+        if (stmt && stmt.period_start) {
+            filename = `expenses_${stmt.period_start.substring(0, 7)}`;
+        }
+    } else {
+        filename = `expenses_${new Date().toISOString().slice(0, 10)}`;
+    }
+    
     // Build CSV
     const headers = ['Date', 'Description', 'Category', 'Amount'];
     const rows = data.transactions.map(t => [
         t.date,
         `"${t.description.replace(/"/g, '""')}"`,
         t.category,
-        t.amount
+        t.amount.toFixed(2)
     ]);
     
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -207,7 +244,7 @@ async function exportCSV() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${filename}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 }

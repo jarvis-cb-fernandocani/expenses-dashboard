@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="upload-page">
-    <h1>Upload Statement</h1>
+    <h1>📤 Upload Statement</h1>
     
     <div class="card upload-card">
         <div class="upload-area" id="upload-area">
@@ -18,9 +18,11 @@
             <p class="file-hint">Only PDF files are accepted</p>
         </div>
         
-        <div id="upload-status" class="upload-status hidden">
-            <div class="spinner"></div>
-            <p id="status-message">Processing...</p>
+        <div id="upload-progress" class="upload-progress hidden">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <p class="progress-text" id="progress-text">Uploading...</p>
         </div>
         
         <div id="upload-result" class="upload-result hidden">
@@ -32,6 +34,7 @@
         <table class="statements-table">
             <thead>
                 <tr>
+                    <th>Period</th>
                     <th>Filename</th>
                     <th>Uploaded</th>
                     <th>Income</th>
@@ -40,7 +43,7 @@
                 </tr>
             </thead>
             <tbody id="statements-list">
-                <tr><td colspan="5">Loading...</td></tr>
+                <tr><td colspan="6">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -87,42 +90,68 @@ function initUpload() {
 
 async function uploadFile(file) {
     if (!file.name.endsWith('.pdf')) {
-        showResult('error', 'Invalid file type. Please upload a PDF file.');
+        showResult('error', '❌ Invalid file type. Please upload a PDF file.');
         return;
     }
     
-    document.getElementById('upload-status').classList.remove('hidden');
+    // Show progress
+    document.getElementById('upload-progress').classList.remove('hidden');
     document.getElementById('upload-result').classList.add('hidden');
-    document.getElementById('status-message').textContent = 'Uploading and processing...';
+    document.getElementById('upload-area').classList.add('hidden');
+    updateProgress(10, 'Uploading...');
     
     const formData = new FormData();
     formData.append('file', file);
     
     try {
+        updateProgress(30, 'Parsing PDF...');
+        
         const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData
         });
         
+        updateProgress(90, 'Saving to database...');
+        
         const result = await response.json();
         
-        document.getElementById('upload-status').classList.add('hidden');
+        updateProgress(100, 'Complete!');
+        
+        document.getElementById('upload-progress').classList.add('hidden');
+        document.getElementById('upload-area').classList.remove('hidden');
         document.getElementById('upload-result').classList.remove('hidden');
         
         if (result.error) {
-            showResult('error', result.error);
+            showResult('error', `❌ ${result.error}`);
         } else {
+            let periodInfo = '';
+            if (result.period_start && result.period_end) {
+                periodInfo = `<p>📅 Period: ${result.period_start} to ${result.period_end}</p>`;
+            }
             showResult('success', `
-                <p><strong>✓ Upload successful!</strong></p>
+                <p><strong>✅ Upload successful!</strong></p>
                 <p>${result.message}</p>
-                <p>Income: €${formatNumber(result.income)} | Expenses: €${formatNumber(result.expenses)}</p>
+                ${periodInfo}
+                <p>💰 Income: €${formatNumber(result.income)} | 💸 Expenses: €${formatNumber(result.expenses)}</p>
             `);
             loadStatements();
         }
     } catch (error) {
-        document.getElementById('upload-status').classList.add('hidden');
-        showResult('error', 'Upload failed: ' + error.message);
+        document.getElementById('upload-progress').classList.add('hidden');
+        document.getElementById('upload-area').classList.remove('hidden');
+        showResult('error', `❌ Upload failed: ${error.message}`);
     }
+    
+    // Reset progress after a delay
+    setTimeout(() => {
+        document.getElementById('upload-progress').classList.add('hidden');
+        updateProgress(0, 'Uploading...');
+    }, 2000);
+}
+
+function updateProgress(percent, text) {
+    document.getElementById('progress-fill').style.width = percent + '%';
+    document.getElementById('progress-text').textContent = text;
 }
 
 function showResult(type, message) {
@@ -139,12 +168,13 @@ async function loadStatements() {
         const tbody = document.getElementById('statements-list');
         
         if (data.statements.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5">No statements uploaded yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6">No statements uploaded yet</td></tr>';
             return;
         }
         
         tbody.innerHTML = data.statements.map(s => `
             <tr>
+                <td>${s.period_start ? s.period_start.substring(0, 7) : '-'}</td>
                 <td>${escapeHtml(s.filename)}</td>
                 <td>${new Date(s.uploaded_at).toLocaleDateString()}</td>
                 <td class="income">€${formatNumber(s.total_income)}</td>

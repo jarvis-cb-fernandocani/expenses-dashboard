@@ -10,12 +10,14 @@
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="/">💰 Expenses Dashboard</a>
+            <a href="/">💰 Expenses</a>
         </div>
-        <div class="nav-links">
+        <button class="menu-toggle" onclick="toggleMenu()">☰</button>
+        <div class="nav-links" id="nav-links">
             <a href="/">Dashboard</a>
             <a href="/expenses">Expenses</a>
             <a href="/upload">Upload</a>
+            <a href="/budgets">Budgets</a>
         </div>
     </nav>
 
@@ -24,10 +26,15 @@
     </main>
 
     <footer class="footer">
-        <p>Expenses Dashboard - Millennium BCP Parser</p>
+        <p>💰 Expenses Dashboard</p>
     </footer>
 
     <script src="/static/js/app.js"></script>
+    <script>
+    function toggleMenu() {
+        document.getElementById('nav-links').classList.toggle('active');
+    }
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
