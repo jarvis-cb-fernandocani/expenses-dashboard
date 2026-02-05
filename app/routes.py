@@ -175,9 +175,21 @@ def get_summary():
     """Get financial summary."""
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
     
     database = get_db()
-    summary = database.get_summary(year=year, month=month)
+    
+    if start_date and end_date:
+        # Use date range
+        summary = database.get_summary_by_date_range(start_date, end_date)
+    elif year and month:
+        summary = database.get_summary(year=year, month=month)
+    elif year:
+        summary = database.get_summary(year=year)
+    else:
+        # Default to current month
+        summary = database.get_summary()
     
     return jsonify(summary)
 

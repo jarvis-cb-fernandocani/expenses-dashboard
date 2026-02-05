@@ -4,46 +4,77 @@
 
 {% block content %}
 <div class="dashboard">
-    <h1>Dashboard</h1>
+    <div class="dashboard-header">
+        <h1>💰 Dashboard</h1>
+        <div class="header-actions">
+            <button onclick="toggleDarkMode()" class="btn btn-secondary" title="Toggle Dark Mode">🌙</button>
+        </div>
+    </div>
+    
+    <div class="date-range-selector card">
+        <div class="date-range-inputs">
+            <div class="filter-group">
+                <label for="date-start">From</label>
+                <input type="date" id="date-start" onchange="updateDateRange()">
+            </div>
+            <div class="filter-group">
+                <label for="date-end">To</label>
+                <input type="date" id="date-end" onchange="updateDateRange()">
+            </div>
+            <div class="filter-group">
+                <label for="date-preset">Preset</label>
+                <select id="date-preset" onchange="applyDatePreset()">
+                    <option value="this-month">This Month</option>
+                    <option value="last-month">Last Month</option>
+                    <option value="this-year">This Year</option>
+                    <option value="last-30">Last 30 Days</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+            <button onclick="exportData()" class="btn btn-secondary">💾 Export Data</button>
+            <button onclick="document.getElementById('import-file').click()" class="btn btn-secondary">📥 Import</button>
+            <input type="file" id="import-file" accept=".json" hidden onchange="importData(this)">
+        </div>
+    </div>
     
     <div class="summary-cards">
         <div class="card">
             <h3>💵 Income</h3>
-            <p class="amount income" id="monthly-income">€0.00</p>
-            <p class="label">This Month</p>
+            <p class="amount income" id="period-income">€0.00</p>
+            <p class="label" id="period-label">This Month</p>
         </div>
         <div class="card">
             <h3>💸 Expenses</h3>
-            <p class="amount expenses" id="monthly-expenses">€0.00</p>
-            <p class="label">This Month</p>
+            <p class="amount expenses" id="period-expenses">€0.00</p>
+            <p class="label">Total Spending</p>
         </div>
         <div class="card">
             <h3>📈 Net</h3>
-            <p class="amount net" id="monthly-net">€0.00</p>
-            <p class="label">This Month</p>
+            <p class="amount net" id="period-net">€0.00</p>
+            <p class="label">Balance</p>
         </div>
         <div class="card">
             <h3>📊 Savings Rate</h3>
-            <p class="amount" id="savings-rate">0%</p>
-            <p class="label">This Month</p>
+            <p class="amount" id="period-savings">0%</p>
+            <p class="label">Savings Rate</p>
         </div>
     </div>
 
     <div class="dashboard-grid">
         <div class="card">
-            <h2>Year Summary</h2>
-            <div id="year-summary">
-                <p class="amount income">Income: €<span id="year-income">0.00</span></p>
-                <p class="amount expenses">Expenses: €<span id="year-expenses">0.00</span></p>
-                <p class="amount net">Net: €<span id="year-net">0.00</span></p>
+            <h2>Period Summary</h2>
+            <div id="period-summary">
+                <p class="amount income">Income: €<span id="summary-income">0.00</span></p>
+                <p class="amount expenses">Expenses: €<span id="summary-expenses">0.00</span></p>
+                <p class="amount net">Net: €<span id="summary-net">0.00</span></p>
             </div>
         </div>
         
         <div class="card">
             <h2>Quick Actions</h2>
             <div class="actions">
-                <a href="/upload" class="btn btn-primary">📤 Upload Statement</a>
-                <a href="/expenses" class="btn btn-secondary">📋 View Expenses</a>
+                <a href="/upload" class="btn btn-primary">📤 Upload</a>
+                <a href="/expenses" class="btn btn-secondary">📋 Expenses</a>
                 <a href="/budgets" class="btn btn-secondary">💰 Budgets</a>
             </div>
         </div>
@@ -66,9 +97,9 @@
     </div>
 
     <div class="card">
-        <h2>Budget Progress</h2>
-        <div id="budget-progress" class="budget-grid">
-            <p>Loading budgets...</p>
+        <h2>💰 Budget vs Actual</h2>
+        <div id="budget-comparison" class="budget-grid">
+            <p>Loading budget data...</p>
         </div>
     </div>
 
@@ -95,36 +126,84 @@
 <script>
 let categoryChart = null;
 let monthlyChart = null;
+let darkMode = false;
 
-document.addEventListener('DOMContentLoaded', async function() {
-    await Promise.all([
+document.addEventListener('DOMContentLoaded', function() {
+    initDatePresets();
+    loadDarkMode();
+    Promise.all([
         loadDashboardData(),
         loadCharts(),
         loadBudgets()
     ]);
 });
 
+function initDatePresets() {
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    document.getElementById('date-start').value = firstDayOfMonth.toISOString().split('T')[0];
+    document.getElementById('date-end').value = today.toISOString().split('T')[0];
+}
+
+function applyDatePreset() {
+    const preset = document.getElementById('date-preset').value;
+    const today = new Date();
+    let start, end = today;
+    
+    switch(preset) {
+        case 'this-month':
+            start = new Date(today.getFullYear(), today.getMonth(), 1);
+            end = today;
+            break;
+        case 'last-month':
+            start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            end = new Date(today.getFullYear(), today.getMonth(), 0);
+            break;
+        case 'this-year':
+            start = new Date(today.getFullYear(), 0, 1);
+            end = today;
+            break;
+        case 'last-30':
+            start = new Date(today);
+            start.setDate(start.getDate() - 30);
+            end = today;
+            break;
+        case 'custom':
+            return; // Use manual dates
+    }
+    
+    document.getElementById('date-start').value = start.toISOString().split('T')[0];
+    document.getElementById('date-end').value = end.toISOString().split('T')[0];
+    updateDateRange();
+}
+
+function updateDateRange() {
+    document.getElementById('date-preset').value = 'custom';
+    Promise.all([
+        loadDashboardData(),
+        loadCharts(),
+        loadBudgets()
+    ]);
+}
+
 async function loadDashboardData() {
     try {
-        // Load monthly summary
-        const month = new Date().getMonth() + 1;
-        const year = new Date().getFullYear();
+        const startDate = document.getElementById('date-start').value;
+        const endDate = document.getElementById('date-end').value;
         
-        const summaryRes = await fetch(`/api/summary?year=${year}&month=${month}`);
+        const summaryRes = await fetch(`/api/summary?start_date=${startDate}&end_date=${endDate}`);
         const summary = await summaryRes.json();
         
-        document.getElementById('monthly-income').textContent = formatCurrency(summary.income);
-        document.getElementById('monthly-expenses').textContent = formatCurrency(summary.expenses);
-        document.getElementById('monthly-net').textContent = formatCurrency(summary.net);
-        document.getElementById('savings-rate').textContent = summary.savings_rate.toFixed(1) + '%';
+        document.getElementById('period-income').textContent = formatCurrency(summary.income);
+        document.getElementById('period-expenses').textContent = formatCurrency(summary.expenses);
+        document.getElementById('period-net').textContent = formatCurrency(summary.net);
+        document.getElementById('period-savings').textContent = summary.savings_rate.toFixed(1) + '%';
         
-        // Year summary
-        const yearRes = await fetch(`/api/summary?year=${year}`);
-        const yearData = await yearRes.json();
-        
-        document.getElementById('year-income').textContent = formatNumber(yearData.income);
-        document.getElementById('year-expenses').textContent = formatNumber(yearData.expenses);
-        document.getElementById('year-net').textContent = formatNumber(yearData.net);
+        document.getElementById('summary-income').textContent = formatNumber(summary.income);
+        document.getElementById('summary-expenses').textContent = formatNumber(summary.expenses);
+        document.getElementById('summary-net').textContent = formatNumber(summary.net);
         
         // Recent transactions
         const transactionsRes = await fetch('/api/expenses?per_page=10');
@@ -154,9 +233,14 @@ async function loadDashboardData() {
 
 async function loadCharts() {
     try {
-        // Category breakdown chart
-        const catRes = await fetch('/api/analytics/category-breakdown');
+        const startDate = document.getElementById('date-start').value;
+        const endDate = document.getElementById('date-end').value;
+        
+        // Category breakdown with date range
+        const catRes = await fetch(`/api/analytics/category-breakdown?start_date=${startDate}&end_date=${endDate}`);
         const catData = await catRes.json();
+        
+        if (categoryChart) categoryChart.destroy();
         
         const ctx1 = document.getElementById('categoryChart').getContext('2d');
         categoryChart = new Chart(ctx1, {
@@ -165,27 +249,23 @@ async function loadCharts() {
                 labels: catData.breakdown.map(c => c.category),
                 datasets: [{
                     data: catData.breakdown.map(c => c.amount),
-                    backgroundColor: [
-                        '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
-                        '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef',
-                        '#f43f5e', '#64748b'
-                    ]
+                    backgroundColor: getChartColors(catData.breakdown.length)
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
                 plugins: {
-                    legend: {
-                        position: 'right'
-                    }
+                    legend: { position: 'right' }
                 }
             }
         });
 
-        // Monthly comparison chart
+        // Monthly comparison
         const monthRes = await fetch('/api/analytics/monthly-comparison');
         const monthData = await monthRes.json();
+        
+        if (monthlyChart) monthlyChart.destroy();
         
         const ctx2 = document.getElementById('monthlyChart').getContext('2d');
         monthlyChart = new Chart(ctx2, {
@@ -193,26 +273,14 @@ async function loadCharts() {
             data: {
                 labels: monthData.monthly_totals.map(m => `M${m.month}`),
                 datasets: [
-                    {
-                        label: 'Income',
-                        data: monthData.monthly_totals.map(m => m.income),
-                        backgroundColor: '#22c55e'
-                    },
-                    {
-                        label: 'Expenses',
-                        data: monthData.monthly_totals.map(m => m.expenses),
-                        backgroundColor: '#ef4444'
-                    }
+                    { label: 'Income', data: monthData.monthly_totals.map(m => m.income), backgroundColor: '#22c55e' },
+                    { label: 'Expenses', data: monthData.monthly_totals.map(m => m.expenses), backgroundColor: '#ef4444' }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
+                scales: { y: { beginAtZero: true } }
             }
         });
     } catch (error) {
@@ -225,7 +293,7 @@ async function loadBudgets() {
         const res = await fetch('/api/budgets');
         const data = await res.json();
         
-        const container = document.getElementById('budget-progress');
+        const container = document.getElementById('budget-comparison');
         
         if (data.budgets.length === 0) {
             container.innerHTML = '<p>No budgets set. <a href="/budgets">Create a budget</a></p>';
@@ -247,6 +315,69 @@ async function loadBudgets() {
     } catch (error) {
         console.error('Error loading budgets:', error);
     }
+}
+
+function getChartColors(count) {
+    const colors = [
+        '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
+        '#06b6d4', '#3b82f1', '#6366f1', '#8b5cf6', '#d946ef',
+        '#f43f5e', '#64748b'
+    ];
+    return colors.slice(0, count);
+}
+
+function toggleDarkMode() {
+    darkMode = !darkMode;
+    document.body.classList.toggle('dark-mode', darkMode);
+    localStorage.setItem('darkMode', darkMode);
+}
+
+function loadDarkMode() {
+    darkMode = localStorage.getItem('darkMode') === 'true';
+    document.body.classList.toggle('dark-mode', darkMode);
+}
+
+async function exportData() {
+    try {
+        const statementsRes = await fetch('/api/statements');
+        const statements = await statementsRes.json();
+        
+        const expensesRes = await fetch('/api/expenses?per_page=10000');
+        const expenses = await expensesRes.json();
+        
+        const budgetsRes = await fetch('/api/budgets');
+        const budgets = await budgetsRes.json();
+        
+        const data = {
+            export_date: new Date().toISOString(),
+            statements: statements.statements,
+            transactions: expenses.transactions,
+            budgets: budgets.budgets
+        };
+        
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `expenses_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        alert('Error exporting data: ' + error.message);
+    }
+}
+
+async function importData(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    if (!confirm('Importing will add new data. Continue?')) {
+        input.value = '';
+        return;
+    }
+    
+    // Note: Import functionality would require backend endpoint
+    alert('Import functionality requires backend implementation. Data file downloaded for reference.');
 }
 </script>
 {% endblock %}

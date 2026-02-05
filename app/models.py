@@ -229,6 +229,52 @@ class Database:
                 'savings_rate': ((income - expenses) / income * 100) if income > 0 else 0
             }
 
+    def get_summary_by_date_range(self, start_date: str, end_date: str) -> Dict[str, float]:
+        """Get summary for a specific date range."""
+        # Convert date strings (YYYY-MM-DD) to month.day format
+        # e.g., "2025-01-01" -> "1.01"
+        start_month = int(start_date.split('-')[1])
+        start_day = int(start_date.split('-')[2])
+        end_month = int(end_date.split('-')[1])
+        end_day = int(end_date.split('-')[2])
+        
+        with self.get_connection() as conn:
+            # For same month
+            if start_month == end_month:
+                row = conn.execute(
+                    """
+                    SELECT 
+                        SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                        SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
+                    FROM transactions
+                    WHERE substr(date, 1, 2) = ? AND CAST(substr(date, 4, 2) AS INTEGER) BETWEEN ? AND ?
+                    """,
+                    (f"{start_month:02d}", start_day, end_day)
+                ).fetchone()
+            else:
+                # Cross month - get all transactions in range
+                row = conn.execute(
+                    """
+                    SELECT 
+                        SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                        SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
+                    FROM transactions
+                    WHERE (substr(date, 1, 2) = ? AND CAST(substr(date, 4, 2) AS INTEGER) >= ?)
+                       OR (substr(date, 1, 2) = ? AND CAST(substr(date, 4, 2) AS INTEGER) <= ?)
+                       OR (CAST(substr(date, 1, 2) AS INTEGER) > ? AND CAST(substr(date, 1, 2) AS INTEGER) < ?)
+                    """,
+                    (f"{start_month:02d}", start_day, f"{end_month:02d}", end_day, start_month, end_month)
+                ).fetchone()
+            
+            income = row['income'] or 0
+            expenses = row['expenses'] or 0
+            return {
+                'income': income,
+                'expenses': expenses,
+                'net': income - expenses,
+                'savings_rate': ((income - expenses) / income * 100) if income > 0 else 0
+            }
+
     def get_transactions_count(
         self,
         statement_id: Optional[int] = None,
