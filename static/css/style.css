@@ -416,3 +416,136 @@ body {
         padding: 0.5rem;
     }
 }
+
+/* Charts */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.chart-container {
+    position: relative;
+    height: 300px;
+}
+
+/* Budget Progress */
+.budget-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.budget-item {
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.budget-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.budget-category {
+    font-weight: 600;
+}
+
+.budget-amount {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+}
+
+.budget-bar {
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.budget-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.3s ease;
+}
+
+.budget-fill.ok {
+    background: #22c55e;
+}
+
+.budget-fill.warning {
+    background: #f59e0b;
+}
+
+.budget-fill.over {
+    background: #ef4444;
+}
+
+.budget-info {
+    font-size: 0.75rem;
+    color: var(--secondary-color);
+    margin-top: 0.5rem;
+}
+
+/* Budgets Page */
+.budgets-page h1 {
+    margin-bottom: 1.5rem;
+}
+
+.budget-form-card {
+    max-width: 500px;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.form-group input,
+.form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 1rem;
+}
+
+.budget-list {
+    margin-top: 1.5rem;
+}
+
+.budget-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+.budget-list-item .info {
+    flex: 1;
+}
+
+.budget-list-item .category {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.budget-list-item .amount {
+    color: var(--secondary-color);
+    font-size: 0.875rem;
+}
+
+.budget-list-item .actions {
+    display: flex;
+    gap: 0.5rem;
+}

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets - Expenses Dashboard{% endblock %}
+
+{% block content %}
+<div class="budgets-page">
+    <h1>💰 Budget Goals</h1>
+    
+    <div class="card budget-form-card">
+        <h2>Set Monthly Budget</h2>
+        <form id="budget-form">
+            <div class="form-group">
+                <label for="category">Category</label>
+                <select id="category" name="category" required>
+                    <option value="">Select a category</option>
+                    <option value="Groceries">Groceries</option>
+                    <option value="Rent">Rent</option>
+                    <option value="Utilities">Utilities</option>
+                    <option value="Transport">Transport</option>
+                    <option value="Dining">Dining</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Shopping">Shopping</option>
+                    <option value="Health">Health</option>
+                    <option value="Insurance">Insurance</option>
+                    <option value="Subscriptions">Subscriptions</option>
+                    <option value="Fees">Fees</option>
+                    <option value="Other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="monthly_limit">Monthly Limit (€)</label>
+                <input type="number" id="monthly_limit" name="monthly_limit" 
+                       placeholder="0.00" step="0.01" min="0" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Set Budget</button>
+        </form>
+        
+        <div id="budget-message" class="budget-message hidden"></div>
+    </div>
+
+    <div class="card">
+        <h2>Your Budgets</h2>
+        <div id="budget-list" class="budget-list">
+            <p>Loading...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadBudgets();
+    initForm();
+});
+
+function initForm() {
+    const form = document.getElementById('budget-form');
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const category = document.getElementById('category').value;
+        const monthly_limit = document.getElementById('monthly_limit').value;
+        
+        try {
+            const response = await fetch('/api/budgets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ category, monthly_limit })
+            });
+            
+            const result = await response.json();
+            
+            const msgEl = document.getElementById('budget-message');
+            msgEl.classList.remove('hidden', 'error', 'success');
+            
+            if (result.error) {
+                msgEl.classList.add('error');
+                msgEl.textContent = result.error;
+            } else {
+                msgEl.classList.add('success');
+                msgEl.textContent = result.message;
+                form.reset();
+                loadBudgets();
+            }
+        } catch (error) {
+            const msgEl = document.getElementById('budget-message');
+            msgEl.classList.remove('hidden');
+            msgEl.classList.add('error');
+            msgEl.textContent = 'Error setting budget: ' + error.message;
+        }
+    });
+}
+
+async function loadBudgets() {
+    try {
+        const response = await fetch('/api/budgets');
+        const data = await response.json();
+        
+        const container = document.getElementById('budget-list');
+        
+        if (data.budgets.length === 0) {
+            container.innerHTML = '<p>No budgets set yet. Create your first budget above.</p>';
+            return;
+        }
+        
+        container.innerHTML = data.budgets.map(b => `
+            <div class="budget-list-item">
+                <div class="info">
+                    <p class="category">${b.category}</p>
+                    <p class="amount">€${formatNumber(b.spent)} / €${formatNumber(b.monthly_limit)} (${b.percent_used}%)</p>
+                </div>
+                <div class="actions">
+                    <button onclick="deleteBudget('${b.category}')" class="btn btn-danger btn-sm">Delete</button>
+                </div>
+            </div>
+            <div class="budget-bar" style="margin-bottom: 1rem;">
+                <div class="budget-fill ${b.status}" style="width: ${Math.min(b.percent_used, 100)}%"></div>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading budgets:', error);
+        document.getElementById('budget-list').innerHTML = '<p>Error loading budgets</p>';
+    }
+}
+
+async function deleteBudget(category) {
+    if (!confirm(`Delete budget for ${category}?`)) return;
+    
+    try {
+        const response = await fetch(`/api/budgets/${encodeURIComponent(category)}`, {
+            method: 'DELETE'
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            loadBudgets();
+        } else {
+            alert(result.error || 'Error deleting budget');
+        }
+    } catch (error) {
+        alert('Error deleting budget: ' + error.message);
+    }
+}
+</script>
+
+<style>
+.budget-message {
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-top: 1rem;
+}
+
+.budget-message.success {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.budget-message.error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.budget-message.hidden {
+    display: none;
+}
+</style>
+{% endblock %}

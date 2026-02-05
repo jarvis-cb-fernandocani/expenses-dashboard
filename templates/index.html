@@ -44,7 +44,31 @@
             <div class="actions">
                 <a href="/upload" class="btn btn-primary">📤 Upload Statement</a>
                 <a href="/expenses" class="btn btn-secondary">📋 View Expenses</a>
+                <a href="/budgets" class="btn btn-secondary">💰 Budgets</a>
             </div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="card">
+            <h2>Expenses by Category</h2>
+            <div class="chart-container">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2>Monthly Comparison</h2>
+            <div class="chart-container">
+                <canvas id="monthlyChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Budget Progress</h2>
+        <div id="budget-progress" class="budget-grid">
+            <p>Loading budgets...</p>
         </div>
     </div>
 
@@ -69,8 +93,15 @@
 
 {% block scripts %}
 <script>
+let categoryChart = null;
+let monthlyChart = null;
+
 document.addEventListener('DOMContentLoaded', async function() {
-    await loadDashboardData();
+    await Promise.all([
+        loadDashboardData(),
+        loadCharts(),
+        loadBudgets()
+    ]);
 });
 
 async function loadDashboardData() {
@@ -118,6 +149,103 @@ async function loadDashboardData() {
         }
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+async function loadCharts() {
+    try {
+        // Category breakdown chart
+        const catRes = await fetch('/api/analytics/category-breakdown');
+        const catData = await catRes.json();
+        
+        const ctx1 = document.getElementById('categoryChart').getContext('2d');
+        categoryChart = new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: catData.breakdown.map(c => c.category),
+                datasets: [{
+                    data: catData.breakdown.map(c => c.amount),
+                    backgroundColor: [
+                        '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6',
+                        '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef',
+                        '#f43f5e', '#64748b'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+
+        // Monthly comparison chart
+        const monthRes = await fetch('/api/analytics/monthly-comparison');
+        const monthData = await monthRes.json();
+        
+        const ctx2 = document.getElementById('monthlyChart').getContext('2d');
+        monthlyChart = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: monthData.monthly_totals.map(m => `M${m.month}`),
+                datasets: [
+                    {
+                        label: 'Income',
+                        data: monthData.monthly_totals.map(m => m.income),
+                        backgroundColor: '#22c55e'
+                    },
+                    {
+                        label: 'Expenses',
+                        data: monthData.monthly_totals.map(m => m.expenses),
+                        backgroundColor: '#ef4444'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading charts:', error);
+    }
+}
+
+async function loadBudgets() {
+    try {
+        const res = await fetch('/api/budgets');
+        const data = await res.json();
+        
+        const container = document.getElementById('budget-progress');
+        
+        if (data.budgets.length === 0) {
+            container.innerHTML = '<p>No budgets set. <a href="/budgets">Create a budget</a></p>';
+            return;
+        }
+        
+        container.innerHTML = data.budgets.map(b => `
+            <div class="budget-item">
+                <div class="budget-header">
+                    <span class="budget-category">${b.category}</span>
+                    <span class="budget-amount">€${formatNumber(b.spent)} / €${formatNumber(b.monthly_limit)}</span>
+                </div>
+                <div class="budget-bar">
+                    <div class="budget-fill ${b.status}" style="width: ${Math.min(b.percent_used, 100)}%"></div>
+                </div>
+                <p class="budget-info">${b.percent_used}% used (${b.status === 'over' ? 'over budget!' : b.status === 'warning' ? 'approaching limit' : 'on track'})</p>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Error loading budgets:', error);
     }
 }
 </script>

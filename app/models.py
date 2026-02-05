@@ -286,3 +286,118 @@ class Database:
             )
             conn.commit()
             return result.rowcount > 0
+
+    # === Budget Methods ===
+
+    def create_budgets_table(self) -> None:
+        """Create the budgets table if it doesn't exist."""
+        with self.get_connection() as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS budgets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT NOT NULL UNIQUE,
+                    monthly_limit REAL NOT NULL DEFAULT 0,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category);
+            """)
+
+    def set_budget(self, category: str, monthly_limit: float) -> int:
+        """Set or update a budget for a category."""
+        self.create_budgets_table()
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO budgets (category, monthly_limit)
+                VALUES (?, ?)
+                ON CONFLICT(category) DO UPDATE SET
+                    monthly_limit = excluded.monthly_limit,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (category, monthly_limit)
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_budget(self, category: str) -> Optional[Dict[str, Any]]:
+        """Get budget for a specific category."""
+        self.create_budgets_table()
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT * FROM budgets WHERE category = ?",
+                (category,)
+            ).fetchone()
+            return dict(row) if row else None
+
+    def get_all_budgets(self) -> List[Dict[str, Any]]:
+        """Get all budgets."""
+        self.create_budgets_table()
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT * FROM budgets ORDER BY category"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_budget(self, category: str) -> bool:
+        """Delete a budget."""
+        self.create_budgets_table()
+        with self.get_connection() as conn:
+            result = conn.execute(
+                "DELETE FROM budgets WHERE category = ?",
+                (category,)
+            )
+            conn.commit()
+            return result.rowcount > 0
+
+    def get_spent_by_category_month(self, category: str, month: int, year: int) -> float:
+        """Get total spent for a category in a specific month."""
+        with self.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT SUM(ABS(amount)) as total
+                FROM transactions
+                WHERE category = ? AND amount < 0
+                AND substr(date, 1, 2) = ?
+                """,
+                (category, f"{month:02d}")
+            ).fetchone()
+            return row['total'] or 0
+
+    def get_monthly_spending_by_category(self, month: int, year: int) -> Dict[str, float]:
+        """Get spending by category for a specific month."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT category, SUM(ABS(amount)) as total
+                FROM transactions
+                WHERE amount < 0 AND substr(date, 1, 2) = ?
+                GROUP BY category
+                """,
+                (f"{month:02d}",)
+            ).fetchall()
+            return {row['category']: row['total'] for row in rows}
+
+    def get_monthly_totals(self, year: int) -> List[Dict[str, Any]]:
+        """Get income and expenses by month for the year."""
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT 
+                    substr(date, 1, 2) as month,
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
+                    SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
+                FROM transactions
+                WHERE substr(date, 1, 2) IN ('01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12')
+                GROUP BY month
+                ORDER BY month
+                """,
+            ).fetchall()
+            return [
+                {
+                    'month': int(row['month']),
+                    'income': row['income'] or 0,
+                    'expenses': row['expenses'] or 0
+                }
+                for row in rows
+            ]

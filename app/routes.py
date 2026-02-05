@@ -196,3 +196,122 @@ def delete_statement(statement_id: int):
     if result:
         return jsonify({'success': True, 'message': 'Statement deleted'})
     return jsonify({'error': 'Statement not found'}), 404
+
+
+# === Budget API ===
+
+@bp.route('/api/budgets', methods=['GET'])
+def get_budgets():
+    """Get all budgets with current spending."""
+    database = get_db()
+    budgets = database.get_all_budgets()
+    
+    # Get current month spending
+    import datetime
+    now = datetime.datetime.now()
+    month = now.month
+    year = now.year
+    
+    result = []
+    for budget in budgets:
+        spent = database.get_spent_by_category_month(
+            budget['category'], month, year
+        )
+        remaining = budget['monthly_limit'] - spent
+        percent_used = (spent / budget['monthly_limit'] * 100) if budget['monthly_limit'] > 0 else 0
+        
+        result.append({
+            **budget,
+            'spent': spent,
+            'remaining': remaining,
+            'percent_used': round(percent_used, 1),
+            'status': 'over' if spent > budget['monthly_limit'] else 'warning' if percent_used > 80 else 'ok'
+        })
+    
+    return jsonify({'budgets': result})
+
+
+@bp.route('/api/budgets', methods=['POST'])
+def set_budget():
+    """Set or update a budget for a category."""
+    data = request.get_json()
+    
+    if not data or 'category' not in data or 'monthly_limit' not in data:
+        return jsonify({'error': 'category and monthly_limit required'}), 400
+    
+    try:
+        monthly_limit = float(data['monthly_limit'])
+    except (TypeError, ValueError):
+        return jsonify({'error': 'monthly_limit must be a number'}), 400
+    
+    database = get_db()
+    budget_id = database.set_budget(data['category'], monthly_limit)
+    
+    return jsonify({
+        'success': True,
+        'message': f'Budget set for {data["category"]}',
+        'budget_id': budget_id
+    })
+
+
+@bp.route('/api/budgets/<category>', methods=['DELETE'])
+def delete_budget(category: str):
+    """Delete a budget."""
+    database = get_db()
+    result = database.delete_budget(category)
+    
+    if result:
+        return jsonify({'success': True, 'message': 'Budget deleted'})
+    return jsonify({'error': 'Budget not found'}), 404
+
+
+# === Analytics API ===
+
+@bp.route('/api/analytics/category-breakdown', methods=['GET'])
+def category_breakdown():
+    """Get spending breakdown by category for current month."""
+    import datetime
+    now = datetime.datetime.now()
+    month = now.month
+    year = now.year
+    
+    database = get_db()
+    spending = database.get_monthly_spending_by_category(month, year)
+    
+    # Add zero-spending categories from budget
+    budgets = database.get_all_budgets()
+    budget_categories = {b['category'] for b in budgets}
+    all_categories = budget_categories.union(spending.keys())
+    
+    total = sum(spending.values()) if spending else 1
+    
+    result = []
+    for cat in sorted(all_categories):
+        amount = spending.get(cat, 0)
+        percent = (amount / total * 100) if total > 0 else 0
+        result.append({
+            'category': cat,
+            'amount': amount,
+            'percent': round(percent, 1)
+        })
+    
+    return jsonify({
+        'breakdown': result,
+        'month': month,
+        'year': year
+    })
+
+
+@bp.route('/api/analytics/monthly-comparison', methods=['GET'])
+def monthly_comparison():
+    """Get income vs expenses by month for current year."""
+    import datetime
+    year = datetime.datetime.now().year
+    
+    database = get_db()
+    monthly_totals = database.get_monthly_totals(year)
+    
+    return jsonify({
+        'monthly_totals': monthly_totals,
+        'year': year
+    })
